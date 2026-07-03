@@ -1,0 +1,402 @@
+<!--
+  Home Valuation Widget
+  ----------------------
+  Drop this whole block anywhere in your page's HTML. It's self-contained
+  (scoped styles + script) so it won't collide with the rest of your site.
+
+  It posts to /.netlify/functions/valuation, which is included in this project.
+  Update FUNCTION_URL below only if you rename or relocate that function.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<section class="hv-widget" id="hv-widget">
+  <style>
+    #hv-widget {
+      --hv-ink: #14213d;
+      --hv-paper: #fdfcfa;
+      --hv-brass: #b08d57;
+      --hv-brass-dark: #8f7040;
+      --hv-sage: #6b7f66;
+      --hv-clay: #b3452c;
+      --hv-hairline: rgba(20, 33, 61, 0.14);
+      --hv-ink-soft: rgba(20, 33, 61, 0.62);
+
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--hv-paper);
+      border: 1px solid var(--hv-hairline);
+      border-radius: 4px;
+      padding: 40px 36px 36px;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--hv-ink);
+      box-shadow: 0 1px 2px rgba(20, 33, 61, 0.04);
+      position: relative;
+    }
+
+    #hv-widget * { box-sizing: border-box; }
+
+    #hv-widget .hv-eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--hv-brass-dark);
+      margin-bottom: 14px;
+    }
+    #hv-widget .hv-eyebrow::before {
+      content: "";
+      width: 18px;
+      height: 1px;
+      background: var(--hv-brass);
+      display: inline-block;
+    }
+
+    #hv-widget h2 {
+      font-family: "Fraunces", Georgia, serif;
+      font-optical-sizing: auto;
+      font-weight: 500;
+      font-size: 28px;
+      line-height: 1.2;
+      margin: 0 0 8px;
+      letter-spacing: -0.01em;
+    }
+
+    #hv-widget .hv-sub {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--hv-ink-soft);
+      margin: 0 0 28px;
+    }
+
+    #hv-widget form { display: block; }
+
+    #hv-widget .hv-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    #hv-widget .hv-field {
+      margin-bottom: 20px;
+    }
+
+    #hv-widget label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--hv-ink-soft);
+      margin-bottom: 8px;
+    }
+
+    #hv-widget input {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid var(--hv-hairline);
+      background: transparent;
+      font-family: "Inter", sans-serif;
+      font-size: 16px;
+      color: var(--hv-ink);
+      padding: 4px 2px 8px;
+      outline: none;
+      transition: border-color 0.18s ease;
+    }
+    #hv-widget input::placeholder { color: rgba(20, 33, 61, 0.32); }
+    #hv-widget input:focus { border-bottom-color: var(--hv-brass); }
+    #hv-widget input:invalid:not(:placeholder-shown) { border-bottom-color: var(--hv-clay); }
+
+    #hv-widget .hv-submit {
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px 20px;
+      background: var(--hv-ink);
+      color: var(--hv-paper);
+      border: 1px solid var(--hv-ink);
+      border-radius: 3px;
+      font-family: "Inter", sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    }
+    #hv-widget .hv-submit:hover { background: var(--hv-brass); border-color: var(--hv-brass); }
+    #hv-widget .hv-submit:disabled { opacity: 0.55; cursor: default; background: var(--hv-ink); }
+
+    #hv-widget .hv-fineprint {
+      margin-top: 14px;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--hv-ink-soft);
+      text-align: center;
+    }
+
+    /* Result state ("plaque") */
+    #hv-widget .hv-result { display: none; text-align: center; }
+    #hv-widget .hv-result.hv-visible { display: block; }
+    #hv-widget .hv-result .hv-addr {
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--hv-ink-soft);
+      margin-bottom: 18px;
+    }
+    #hv-widget .hv-plaque {
+      border-top: 1px solid var(--hv-brass);
+      border-bottom: 1px solid var(--hv-brass);
+      padding: 26px 0;
+      margin-bottom: 22px;
+    }
+    #hv-widget .hv-plaque-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--hv-brass-dark);
+      margin-bottom: 10px;
+    }
+    #hv-widget .hv-value {
+      font-family: "Fraunces", Georgia, serif;
+      font-weight: 500;
+      font-size: 44px;
+      letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
+    }
+    #hv-widget .hv-range {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--hv-ink-soft);
+      font-variant-numeric: tabular-nums;
+    }
+    #hv-widget .hv-result p.hv-note {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--hv-ink-soft);
+      margin: 0 0 20px;
+    }
+    #hv-widget .hv-reset {
+      background: none;
+      border: none;
+      color: var(--hv-brass-dark);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    /* Fallback state */
+    #hv-widget .hv-fallback { display: none; text-align: center; }
+    #hv-widget .hv-fallback.hv-visible { display: block; }
+    #hv-widget .hv-fallback .hv-mark {
+      width: 44px; height: 44px;
+      border: 1px solid var(--hv-brass);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 18px;
+      color: var(--hv-brass-dark);
+      font-family: "Fraunces", serif;
+      font-size: 20px;
+    }
+    #hv-widget .hv-fallback h3 {
+      font-family: "Fraunces", Georgia, serif;
+      font-weight: 500;
+      font-size: 22px;
+      margin: 0 0 10px;
+    }
+    #hv-widget .hv-fallback p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--hv-ink-soft);
+      margin: 0 0 22px;
+    }
+
+    #hv-widget .hv-error {
+      display: none;
+      font-size: 13px;
+      color: var(--hv-clay);
+      margin: -8px 0 16px;
+    }
+    #hv-widget .hv-error.hv-visible { display: block; }
+
+    @media (max-width: 400px) {
+      #hv-widget { padding: 32px 22px 28px; }
+      #hv-widget .hv-row { grid-template-columns: 1fr; gap: 0; }
+      #hv-widget .hv-value { font-size: 36px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #hv-widget * { transition: none !important; }
+    }
+  </style>
+
+  <div class="hv-eyebrow">Free Home Valuation</div>
+  <h2>What's your home worth today?</h2>
+  <p class="hv-sub">Enter your address for an instant estimate, plus a full comparative report from our team.</p>
+
+  <form id="hv-form" novalidate>
+    <div class="hv-field">
+      <label for="hv-address">Street address</label>
+      <input id="hv-address" name="address" type="text" placeholder="123 Main St" required autocomplete="address-line1">
+    </div>
+
+    <div class="hv-row">
+      <div class="hv-field">
+        <label for="hv-city">City</label>
+        <input id="hv-city" name="city" type="text" placeholder="Jacksonville" required autocomplete="address-level2">
+      </div>
+      <div class="hv-field">
+        <label for="hv-state">State</label>
+        <input id="hv-state" name="state" type="text" placeholder="FL" maxlength="2" required autocomplete="address-level1" style="text-transform:uppercase">
+      </div>
+    </div>
+
+    <div class="hv-row">
+      <div class="hv-field">
+        <label for="hv-zip">ZIP code</label>
+        <input id="hv-zip" name="zip" type="text" placeholder="32202" required autocomplete="postal-code" inputmode="numeric">
+      </div>
+      <div class="hv-field">
+        <label for="hv-name">Your name</label>
+        <input id="hv-name" name="name" type="text" placeholder="Jane Smith" autocomplete="name">
+      </div>
+    </div>
+
+    <div class="hv-field">
+      <label for="hv-email">Email address</label>
+      <input id="hv-email" name="email" type="email" placeholder="jane@example.com" required autocomplete="email">
+    </div>
+
+    <p class="hv-error" id="hv-error">Something went wrong. Please try again.</p>
+
+    <button type="submit" class="hv-submit" id="hv-submit">Get my estimate</button>
+    <p class="hv-fineprint">No obligation. We'll never share your info.</p>
+  </form>
+
+  <div class="hv-result" id="hv-result">
+    <div class="hv-addr" id="hv-result-addr"></div>
+    <div class="hv-plaque">
+      <div class="hv-plaque-label">Estimated Value</div>
+      <div class="hv-value" id="hv-value">$0</div>
+      <div class="hv-range" id="hv-range"></div>
+    </div>
+    <p class="hv-note">This is an automated estimate. For a precise, agent-reviewed valuation, watch your inbox — we're preparing a full comparative report.</p>
+    <button class="hv-reset" id="hv-reset-1" type="button">Check another address</button>
+  </div>
+
+  <div class="hv-fallback" id="hv-fallback">
+    <div class="hv-mark">✓</div>
+    <h3>Report on its way</h3>
+    <p>We couldn't generate an instant number for that address, but our team is preparing a full valuation report and will email it to you shortly.</p>
+    <button class="hv-reset" id="hv-reset-2" type="button">Check another address</button>
+  </div>
+</section>
+
+<script>
+(function () {
+  var FUNCTION_URL = "/.netlify/functions/valuation";
+
+  var root = document.getElementById("hv-widget");
+  var form = root.querySelector("#hv-form");
+  var submitBtn = root.querySelector("#hv-submit");
+  var errorEl = root.querySelector("#hv-error");
+  var resultEl = root.querySelector("#hv-result");
+  var fallbackEl = root.querySelector("#hv-fallback");
+  var valueEl = root.querySelector("#hv-value");
+  var rangeEl = root.querySelector("#hv-range");
+  var addrEl = root.querySelector("#hv-result-addr");
+
+  function fmtMoney(n) {
+    return "$" + Math.round(n).toLocaleString("en-US");
+  }
+
+  function countUp(el, target, duration) {
+    var start = performance.now();
+    function tick(now) {
+      var progress = Math.min((now - start) / duration, 1);
+      var eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      el.textContent = fmtMoney(target * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function showResult(data, fullAddress) {
+    form.style.display = "none";
+    addrEl.textContent = fullAddress;
+    resultEl.classList.add("hv-visible");
+    rangeEl.textContent = fmtMoney(data.low) + " – " + fmtMoney(data.high) + " range";
+    countUp(valueEl, data.estimate, 1100);
+  }
+
+  function showFallback() {
+    form.style.display = "none";
+    fallbackEl.classList.add("hv-visible");
+  }
+
+  function reset() {
+    form.style.display = "block";
+    form.reset();
+    resultEl.classList.remove("hv-visible");
+    fallbackEl.classList.remove("hv-visible");
+    errorEl.classList.remove("hv-visible");
+  }
+
+  root.querySelector("#hv-reset-1").addEventListener("click", reset);
+  root.querySelector("#hv-reset-2").addEventListener("click", reset);
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    errorEl.classList.remove("hv-visible");
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    var payload = {
+      address: form.address.value.trim(),
+      city: form.city.value.trim(),
+      state: form.state.value.trim().toUpperCase(),
+      zip: form.zip.value.trim(),
+      name: form.name.value.trim(),
+      email: form.email.value.trim(),
+    };
+    var fullAddress = payload.address + ", " + payload.city + ", " + payload.state + " " + payload.zip;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Looking that up…";
+
+    fetch(FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Request failed");
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.fallback) {
+          showFallback();
+        } else {
+          showResult(data, fullAddress);
+        }
+      })
+      .catch(function () {
+        errorEl.textContent = "Something went wrong. Please try again.";
+        errorEl.classList.add("hv-visible");
+      })
+      .finally(function () {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Get my estimate";
+      });
+  });
+})();
+</script>
