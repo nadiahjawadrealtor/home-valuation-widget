@@ -13,10 +13,21 @@
 
 const RENTCAST_URL = "https://api.rentcast.io/v1/avm/value";
 const PLUNK_TRACK_URL = "https://api.useplunk.com/v1/track";
+const PLUNK_SEND_URL = "https://api.useplunk.com/v1/send";
 
 exports.handler = async (event) => {
+  // Browsers send a preflight OPTIONS request before a cross-site POST.
+  // Respond to it directly so the real POST is allowed through.
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: corsHeaders(),
+      body: "",
+    };
+  }
+
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method not allowed" };
+    return { statusCode: 405, headers: corsHeaders(), body: "Method not allowed" };
   }
 
   let payload;
@@ -26,10 +37,10 @@ exports.handler = async (event) => {
     return jsonResponse(400, { error: "Invalid JSON body" });
   }
 
-  const { address, city, state, zip, name, email } = payload;
+  const { address, city, state, zip, name, email, phone } = payload;
 
-  if (!address || !city || !state || !zip || !email) {
-    return jsonResponse(400, { error: "address, city, state, zip, and email are required" });
+  if (!address || !city || !state || !zip || !email || !phone) {
+    return jsonResponse(400, { error: "address, city, state, zip, email, and phone are required" });
   }
 
   const fullAddress = `${address}, ${city}, ${state} ${zip}`;
@@ -47,11 +58,19 @@ exports.handler = async (event) => {
   //    This creates/updates the contact and fires an event your Plunk workflow
   //    can use to kick off the follow-up email sequence.
   try {
-    await logLeadToPlunk({ email, name, address: fullAddress, city, state, zip, estimate });
+    await logLeadToPlunk({ email, name, phone, address: fullAddress, city, state, zip, estimate });
   } catch (err) {
     // Don't fail the whole request just because Plunk logging had a hiccup —
     // the person still gets a response either way.
     console.error("Plunk logging failed:", err.message);
+  }
+
+  // 2b. Email Nadiah directly so she sees every lead immediately, separate
+  //     from whatever nurture sequence Plunk's workflow sends the lead itself.
+  try {
+    await notifyAgent({ email, name, phone, address: fullAddress, city, state, zip, estimate });
+  } catch (err) {
+    console.error("Agent notification email failed:", err.message);
   }
 
   // 3. Respond to the widget.
@@ -89,7 +108,7 @@ async function getRentcastEstimate(fullAddress) {
   return data;
 }
 
-async function logLeadToPlunk({ email, name, address, city, state, zip, estimate }) {
+async function logLeadToPlunk({ email, name, phone, address, city, state, zip, estimate }) {
   const publicKey = process.env.PLUNK_PUBLIC_KEY;
   if (!publicKey) throw new Error("PLUNK_PUBLIC_KEY is not set");
 
@@ -105,6 +124,7 @@ async function logLeadToPlunk({ email, name, address, city, state, zip, estimate
       subscribed: true,
       data: {
         name: name || "",
+        phone: phone || "",
         address,
         city,
         state,
@@ -123,10 +143,67 @@ async function logLeadToPlunk({ email, name, address, city, state, zip, estimate
   }
 }
 
+async function notifyAgent({ email, name, phone, address, city, state, zip, estimate }) {
+  const secretKey = process.env.PLUNK_SECRET_KEY;
+  const notifyTo = process.env.NOTIFY_EMAIL || "nadiahjawadrealtor@gmail.com";
+  if (!secretKey) throw new Error("PLUNK_SECRET_KEY is not set");
+
+  const estimateLine = estimate
+    ? `Estimated value: $${Math.round(estimate.price ?? estimate).toLocaleString("en-US")}`
+    : "No instant estimate was available for this address.";
+
+  const body = `
+    <p>New home valuation request from your website:</p>
+    <ul>
+      <li><strong>Name:</strong> ${escapeHtml(name || "(not provided)")}</li>
+      <li><strong>Email:</strong> ${escapeHtml(email)}</li>
+      <li><strong>Phone:</strong> ${escapeHtml(phone || "(not provided)")}</li>
+      <li><strong>Address:</strong> ${escapeHtml(address)}</li>
+      <li>${escapeHtml(estimateLine)}</li>
+    </ul>
+  `;
+
+  const res = await fetch(PLUNK_SEND_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: notifyTo,
+      subject: `New home valuation lead: ${name || email}`,
+      body,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Plunk send responded ${res.status}: ${text}`);
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders() },
     body: JSON.stringify(body),
+  };
+}
+
+function corsHeaders() {
+  // Allows the widget to be called from any site it's embedded on
+  // (your main site, this project's own demo page, etc).
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
   };
 }
