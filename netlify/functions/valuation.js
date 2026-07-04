@@ -12,8 +12,8 @@
 //   PLUNK_PUBLIC_KEY    - pk_... from your Plunk project settings (safe for server-side track calls)
 
 const RENTCAST_URL = "https://api.rentcast.io/v1/avm/value";
-const PLUNK_TRACK_URL = "https://api.useplunk.com/v1/track";
-const PLUNK_SEND_URL = "https://api.useplunk.com/v1/send";
+const PLUNK_TRACK_URL = "https://next-api.useplunk.com/v1/track";
+const PLUNK_SEND_URL = "https://next-api.useplunk.com/v1/send";
 
 exports.handler = async (event) => {
   // Browsers send a preflight OPTIONS request before a cross-site POST.
