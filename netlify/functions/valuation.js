@@ -173,6 +173,7 @@ async function notifyAgent({ email, name, phone, address, city, state, zip, esti
       to: notifyTo,
       subject: `New home valuation lead: ${name || email}`,
       body,
+      from: process.env.NOTIFY_FROM_EMAIL || "valuations@nadiahjawad.com",
     }),
   });
 
