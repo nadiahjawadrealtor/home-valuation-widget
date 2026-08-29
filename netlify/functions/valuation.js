@@ -48,9 +48,11 @@ exports.handler = async (event) => {
   // 1. Try RentCast for an instant estimate. Any failure (missing key, no match,
   //    monthly quota exceeded, network error) just falls through to the fallback state.
   let estimate = null;
+  let estimateIssue = null;
   try {
-    estimate = await getRentcastEstimate(fullAddress);
+    estimate = await getRentcastEstimate(fullAddress, { address, zip });
   } catch (err) {
+    estimateIssue = err.message;
     console.error("RentCast lookup failed:", err.message);
   }
 
@@ -58,7 +60,7 @@ exports.handler = async (event) => {
   //    This creates/updates the contact and fires an event your Plunk workflow
   //    can use to kick off the follow-up email sequence.
   try {
-    await logLeadToPlunk({ email, name, phone, address: fullAddress, city, state, zip, estimate });
+    await logLeadToPlunk({ email, name, phone, address: fullAddress, city, state, zip, estimate, estimateIssue });
   } catch (err) {
     // Don't fail the whole request just because Plunk logging had a hiccup —
     // the person still gets a response either way.
@@ -68,7 +70,7 @@ exports.handler = async (event) => {
   // 2b. Email Nadiah directly so she sees every lead immediately, separate
   //     from whatever nurture sequence Plunk's workflow sends the lead itself.
   try {
-    await notifyAgent({ email, name, phone, address: fullAddress, city, state, zip, estimate });
+    await notifyAgent({ email, name, phone, address: fullAddress, city, state, zip, estimate, estimateIssue });
   } catch (err) {
     console.error("Agent notification email failed:", err.message);
   }
@@ -86,7 +88,7 @@ exports.handler = async (event) => {
   return jsonResponse(200, { fallback: true });
 };
 
-async function getRentcastEstimate(fullAddress) {
+async function getRentcastEstimate(fullAddress, requestedProperty) {
   const apiKey = process.env.RENTCAST_API_KEY;
   if (!apiKey) throw new Error("RENTCAST_API_KEY is not set");
 
@@ -105,10 +107,75 @@ async function getRentcastEstimate(fullAddress) {
     throw new Error("RentCast returned no usable estimate");
   }
 
+  validateRentcastSubject(data, requestedProperty);
+
   return data;
 }
 
-async function logLeadToPlunk({ email, name, phone, address, city, state, zip, estimate }) {
+function validateRentcastSubject(data, { address, zip }) {
+  const subject = data.subjectProperty;
+  if (!subject || !subject.addressLine1 || !subject.zipCode) {
+    throw new Error("RentCast returned incomplete property details");
+  }
+
+  const requestedStreet = normalizeStreetAddress(address);
+  const returnedStreet = normalizeStreetAddress(subject.addressLine1);
+  const requestedHouseNumber = extractHouseNumber(address);
+  const returnedHouseNumber = extractHouseNumber(subject.addressLine1);
+  const requestedZip = String(zip).trim().slice(0, 5);
+  const returnedZip = String(subject.zipCode).trim().slice(0, 5);
+
+  if (
+    !requestedHouseNumber ||
+    !returnedHouseNumber ||
+    requestedHouseNumber !== returnedHouseNumber ||
+    requestedStreet !== returnedStreet ||
+    requestedZip !== returnedZip
+  ) {
+    throw new Error(
+      `Address mismatch: requested ${address}, ${requestedZip}; RentCast matched ${subject.addressLine1}, ${returnedZip}`
+    );
+  }
+
+  if (
+    !subject.propertyType ||
+    typeof subject.squareFootage !== "number" ||
+    subject.squareFootage <= 0
+  ) {
+    throw new Error("RentCast returned incomplete property characteristics");
+  }
+}
+
+function extractHouseNumber(value) {
+  const match = String(value || "").trim().match(/^(\d+[a-z]?)/i);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function normalizeStreetAddress(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\b(northwest|north west)\b/g, "nw")
+    .replace(/\b(northeast|north east)\b/g, "ne")
+    .replace(/\b(southwest|south west)\b/g, "sw")
+    .replace(/\b(southeast|south east)\b/g, "se")
+    .replace(/\bnorth\b/g, "n")
+    .replace(/\bsouth\b/g, "s")
+    .replace(/\beast\b/g, "e")
+    .replace(/\bwest\b/g, "w")
+    .replace(/\bstreet\b/g, "st")
+    .replace(/\bavenue\b/g, "ave")
+    .replace(/\bboulevard\b/g, "blvd")
+    .replace(/\bdrive\b/g, "dr")
+    .replace(/\broad\b/g, "rd")
+    .replace(/\blane\b/g, "ln")
+    .replace(/\bcourt\b/g, "ct")
+    .replace(/\bterrace\b/g, "ter")
+    .replace(/\bplace\b/g, "pl")
+    .replace(/\bcircle\b/g, "cir")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+async function logLeadToPlunk({ email, name, phone, address, city, state, zip, estimate, estimateIssue }) {
   const publicKey = process.env.PLUNK_PUBLIC_KEY;
   if (!publicKey) throw new Error("PLUNK_PUBLIC_KEY is not set");
 
@@ -132,6 +199,7 @@ async function logLeadToPlunk({ email, name, phone, address, city, state, zip, e
         estimate: estimate ? estimate.price : null,
         estimateLow: estimate ? estimate.priceRangeLow : null,
         estimateHigh: estimate ? estimate.priceRangeHigh : null,
+        estimateIssue: estimateIssue || null,
         source: "home-valuation-widget",
       },
     }),
@@ -143,14 +211,14 @@ async function logLeadToPlunk({ email, name, phone, address, city, state, zip, e
   }
 }
 
-async function notifyAgent({ email, name, phone, address, city, state, zip, estimate }) {
+async function notifyAgent({ email, name, phone, address, city, state, zip, estimate, estimateIssue }) {
   const secretKey = process.env.PLUNK_SECRET_KEY;
   const notifyTo = process.env.NOTIFY_EMAIL || "nadiahjawadrealtor@gmail.com";
   if (!secretKey) throw new Error("PLUNK_SECRET_KEY is not set");
 
   const estimateLine = estimate
     ? `Estimated value: $${Math.round(estimate.price ?? estimate).toLocaleString("en-US")}`
-    : "No instant estimate was available for this address.";
+    : `No instant estimate was displayed.${estimateIssue ? ` Reason: ${estimateIssue}` : ""}`;
 
   const body = `
     <p>New home valuation request from your website:</p>
