@@ -186,7 +186,10 @@ async function logLeadToPlunk({ email, name, phone, address, city, state, zip, e
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      event: "home_valuation_requested",
+      // Only verified estimates may enter the existing estimate-email automation.
+      // Failed or mismatched lookups use a separate event so Plunk cannot build
+      // a customer email from a null estimate.
+      event: estimate ? "home_valuation_requested" : "home_valuation_review_required",
       email,
       subscribed: true,
       data: {
@@ -200,6 +203,7 @@ async function logLeadToPlunk({ email, name, phone, address, city, state, zip, e
         estimateLow: estimate ? estimate.priceRangeLow : null,
         estimateHigh: estimate ? estimate.priceRangeHigh : null,
         estimateIssue: estimateIssue || null,
+        estimateStatus: estimate ? "verified" : "review_required",
         source: "home-valuation-widget",
       },
     }),
