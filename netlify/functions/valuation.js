@@ -56,15 +56,19 @@ exports.handler = async (event) => {
     console.error("RentCast lookup failed:", err.message);
   }
 
-  // 2. Log the lead to Plunk regardless of whether the estimate succeeded.
-  //    This creates/updates the contact and fires an event your Plunk workflow
-  //    can use to kick off the follow-up email sequence.
-  try {
-    await logLeadToPlunk({ email, name, phone, address: fullAddress, city, state, zip, estimate, estimateIssue });
-  } catch (err) {
-    // Don't fail the whole request just because Plunk logging had a hiccup —
-    // the person still gets a response either way.
-    console.error("Plunk logging failed:", err.message);
+  // 2. Only verified estimates enter Plunk's customer-email automation.
+  //    Tracking a failed lookup can trigger the automation with a null estimate,
+  //    so review-required leads are kept out and sent to Nadiah by email below.
+  if (estimate) {
+    try {
+      await logLeadToPlunk({ email, name, phone, address: fullAddress, city, state, zip, estimate, estimateIssue });
+    } catch (err) {
+      // Don't fail the whole request just because Plunk logging had a hiccup —
+      // the person still gets a response either way.
+      console.error("Plunk logging failed:", err.message);
+    }
+  } else {
+    console.log("Skipped Plunk automation for review-required valuation:", estimateIssue || "unknown issue");
   }
 
   // 2b. Email Nadiah directly so she sees every lead immediately, separate
